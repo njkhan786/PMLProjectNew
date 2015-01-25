@@ -1,0 +1,145 @@
+---
+title: "PMLWriteUp"
+author: "Nasir Jamal Khan"
+date: "Sunday, January 25, 2015"
+output: html_document
+---
+#Description:  
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior.  
+In this project, your goal will be to use data from accelerometers on the belt, 
+forearm, arm, and dumbell of 6 participants. They were asked to perform barbell 
+lifts correctly and incorrectly in 5 different ways. More information is available from 
+the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).  
+
+#Objective:  
+The goal of your project is to:  
+-  Predict the manner in which they did the exercise. 
+-  Create a report describing how you built your model, how you used cross validation,  You may use variable "classe" or any of the other variables to predict with, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did  
+
+#Data Source:  
+
+The training and test data for this project are available here: 
+
+(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The data for this project come from this source: [link](http://groupware.les.inf.puc-rio.br/har)  
+
+#Processing and Analysis  
+
+##Data Loading:  
+The source training and testing datasets from above links were downloaded and loaded into respective data frame as following. 
+
+```{r libraries.etc, echo=FALSE, results='hide', message=FALSE}
+cachepkgs = TRUE
+```
+
+```{r pkgs.loading.chunk1, cache = cachepkgs, echo=FALSE, warning=FALSE, message=FALSE}
+# Install packages
+library(AppliedPredictiveModeling)
+library(ggplot2)
+library(lattice)
+library(caret)
+library(rattle)
+#install.packages('rpart.plot')
+#library(rpart.plot)
+library(randomForest)
+# load data
+training<-read.csv('I:/Coursera/PMLearning/Project/pml-training.csv',na.strings=c("NA","#DIV/0!",""),header=T)
+testing<-read.csv('I:/Coursera/PMLearning/Project/pml-testing.csv',na.strings=c("NA","#DIV/0!",""),header=T)
+dim(training);dim(testing)
+```
+
+##Data Cleaning:  
+The both datasets have identical 160 variables. There is a high number of variables which are either irrelevent or not valid i.e. high percent of values such as **NA**. Also the first seven variables are removed as those are not revelent for preparing the predicting model.  
+
+```{r cache=TRUE}
+set.seed(78662)     # A random seed number which will be used throughout this project  
+
+trainingCols <- colnames(training)
+CountbyColumns <- as.vector(apply(training, 2, 
+                            function(training) length(which(!is.na(training)))))
+Var4removal <- c()
+for (cnt in 1:length(CountbyColumns)) {
+    if (CountbyColumns[cnt] < nrow(training)) {
+        Var4removal <- c(Var4removal, trainingCols[cnt])
+    }
+}
+Cleantraining <- training[,!(names(training) %in% Var4removal)]
+Cleantraining <- Cleantraining[,8:length(colnames(Cleantraining))]
+#
+Cleantesting <- testing[,!(names(testing) %in% Var4removal)]
+testing <- Cleantesting[,8:length(colnames(Cleantesting))]
+dim(Cleantraining); dim(testing)
+```
+
+##Partitioning of Training Data for processing and cross validating:  
+
+```{r cache=TRUE}
+inTrain <- createDataPartition(y=Cleantraining$classe, p=0.6, list=FALSE)
+newtraining <- Cleantraining[inTrain, ]; validation <- Cleantraining[-inTrain, ]
+dim(newtraining); dim(validation)
+``` 
+
+## Model fitting using rpart:
+```{r cache=TRUE}
+set.seed(78662)
+library(rpart.plot)
+tree1 <- rpart(validation$classe ~ ., data = validation)
+plot(tree1,main="Recursive partitioning")
+text(tree1)
+treeValidation <- predict(tree1, validation, type = "class")
+qplot(treeValidation,classe,data=validation, main="Predicted Vs Actual Classe")
+CMat<-confusionMatrix(treeValidation, validation$classe)
+ctable <- as.table(matrix(c(CMat$table), nrow = 5, byrow = TRUE)) 
+#plot(ctable)
+plot(ctable, type = "barplot",main="Confusion Matix")
+print(CMat)
+```
+
+#Result:  
+Based on the above following results from predicted model and confusion matrix data we conclude that this model is not accurate and fit enough for testing against **testing** dataset.
+
+- Accuracy : 0.7452
+- 95% CI : (0.7354, 0.7548)
+- Kappa : 0.676  
+
+## Model fitting using randomForest method and preparing prediction data: 
+```{r cache=TRUE}
+set.seed(78662)
+modelFit <- randomForest(classe ~. , data=newtraining)
+predValidation <- predict(modelFit, validation, type = "class")
+qplot(predValidation,classe,data=validation,main="Predicted Vs Actual Classe")
+print(modelFit)
+CMat<-confusionMatrix(predValidation, validation$classe)
+ctable <- as.table(matrix(c(CMat$table), nrow = 5, byrow = TRUE)) 
+plot(ctable, type = "barplot", main="Confusion Matrix")
+print(CMat)
+
+```
+
+#Result:  
+Based on following result from predicted model and confusion matrix data we conclude that this model is highly accurate and fit for testing against **testing** dataset.
+
+- OOB estimate of  error rate: 0.72%
+- Accuracy : 0.9943
+- 95% CI : (0.9923, 0.9958)
+- Kappa : 0.9927
+
+## Preparing files for submitting for test:  
+The prediction model was tested against the testing dataset and using the new prediction model 20 new files were created which were all correct. The following chunck shows the  commented out r codes to produce those files so that it does not produce those files again.  
+
+```{r cache=TRUE}
+set.seed(78662)
+# predtest <- predict(modelFit, testing, type = "class")
+# pml_write_files = function(x){
+#   n = length(x)
+#   for(i in 1:n){
+#     filename = paste0("problem_id_",i,".txt")
+#     write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+#   }
+# }
+# 
+# pml_write_files(predtest)
+```
